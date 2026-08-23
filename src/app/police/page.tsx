@@ -10,8 +10,10 @@ import {
   formatLogDayLabel,
   knownDispositions,
   pluralise,
+  relativeTime,
 } from "@/lib/format";
 import {
+  policeFreshness,
   incidentTypeCounts,
   incidentsByHour,
   pressLogCoverage,
@@ -67,12 +69,15 @@ export default async function PolicePage({
 }) {
   const { type } = await searchParams;
 
-  const [incidents, types, hours, coverage] = await Promise.all([
+  const [incidents, types, hours, coverage, freshness] = await Promise.all([
     recentIncidents(120, type),
     incidentTypeCounts(30),
     incidentsByHour(90),
     pressLogCoverage(14),
+    policeFreshness(),
   ]);
+
+  const fresh = freshness.rows[0] ?? null;
 
   const gapDays = coverage.rows.filter((row) => row.case_gaps > 0);
 
@@ -111,6 +116,37 @@ export default async function PolicePage({
 
       <WithSectionNav sections={sections}>
       <div className="space-y-10">
+      {fresh?.latest_log ? (
+        <section className="card p-4 text-sm">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+            <p>
+              <span className="muted">Most recent log published by MPD:</span>{" "}
+              <strong>{formatCalendarDate(fresh.latest_log)}</strong>
+            </p>
+            <p className="faint text-xs">
+              {fresh.last_checked
+                ? "We last checked for new logs " + relativeTime(fresh.last_checked) + "."
+                : "Not yet checked."}
+            </p>
+          </div>
+          {/*
+            MPD covers every day but only posts on business days, so a
+            weekend gap is their schedule rather than a fault here. Saying so
+            stops "no new log" being read as "the site is broken".
+          */}
+          <p className="muted mt-2 max-w-prose text-xs">
+            Moscow PD logs every day but publishes on business days, so weekend
+            activity usually appears the following Monday. This site checks five times a
+            day; if the newest log above is older than that, MPD has not posted it yet.
+            Feed health is on{" "}
+            <Link href="/sources" className="link-underline">
+              the sources page
+            </Link>
+            .
+          </p>
+        </section>
+      ) : null}
+
       {/* Coverage and integrity ------------------------------------------ */}
       {coverage.rows.length > 0 ? (
         <section id="coverage">

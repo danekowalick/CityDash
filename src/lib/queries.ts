@@ -957,3 +957,31 @@ export function propertyStats() {
        (SELECT MAX(decided_on) FROM land_use_actions) AS latest_action`,
   );
 }
+
+export interface PoliceFreshnessRow {
+  latest_log: Date | null;
+  logs_held: string;
+  last_checked: Date | null;
+  last_status: string | null;
+}
+
+/**
+ * When MPD last published, and when we last looked.
+ *
+ * These are different facts and the difference matters: MPD covers every day
+ * but only posts on business days, so a weekend gap is the city's schedule,
+ * not a broken scraper. Showing both lets a reader tell them apart instead of
+ * guessing.
+ */
+export function policeFreshness() {
+  return safeQuery<PoliceFreshnessRow>(
+    `SELECT
+       (SELECT MAX(log_date) FROM press_logs) AS latest_log,
+       (SELECT COUNT(DISTINCT log_date) FROM press_logs) AS logs_held,
+       (SELECT MAX(finished_at) FROM fetch_runs
+         WHERE source_id = 'mpd-press-logs' AND status = 'ok') AS last_checked,
+       (SELECT status FROM fetch_runs
+         WHERE source_id = 'mpd-press-logs'
+         ORDER BY started_at DESC LIMIT 1) AS last_status`,
+  );
+}
