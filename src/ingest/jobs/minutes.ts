@@ -33,13 +33,21 @@ interface PendingMeeting {
 /**
  * Meetings whose minutes we could read, most valuable first.
  *
- * With several years of history there are ~900 minutes PDFs, and a partial
- * run should still land the ones that matter. Priority order:
+ * With several years of history there are ~900 minutes PDFs, so a capped run
+ * has to choose. Priority order:
  *
- *   1. Meetings that adopted an ordinance (their date matches an ordinance's
+ *   1. Minutes never fetched at all.
+ *   2. Meetings that adopted an ordinance (their date matches an ordinance's
  *      adoption date) -- these complete a decision chain from vote to code.
- *   2. City Council, where ordinances are passed.
- *   3. Everything else, newest first.
+ *   3. City Council, where ordinances are passed.
+ *   4. Everything else, newest first.
+ *
+ * Never-fetched comes first because the limit caps *candidates considered*,
+ * not new items found. Ranking by value alone meant that once the top of the
+ * list was cached, a nightly run spent its whole budget re-checking hashes it
+ * already had and never reached a newly published set of minutes further
+ * down -- so a commission that is neither Council nor ordinance-adopting
+ * would have gone stale indefinitely.
  */
 async function pendingMeetings(limit: number): Promise<PendingMeeting[]> {
   return query<PendingMeeting>(
@@ -48,6 +56,7 @@ async function pendingMeetings(limit: number): Promise<PendingMeeting[]> {
        LEFT JOIN meeting_minutes mm ON mm.meeting_id = m.id
       WHERE m.minutes_url IS NOT NULL
       ORDER BY
+        CASE WHEN mm.meeting_id IS NULL THEN 0 ELSE 1 END,
         CASE WHEN EXISTS (
           SELECT 1 FROM ordinances o WHERE o.adopted_on = m.starts_at::date
         ) THEN 0 ELSE 1 END,
