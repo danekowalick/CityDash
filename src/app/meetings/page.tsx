@@ -349,6 +349,7 @@ export default async function MeetingsPage({
                         ? "/meetings"
                         : { pathname: "/meetings", query: { show: option.key } }
                     }
+                    scroll={false}
                     className="card px-2.5 py-1 text-sm transition-colors hover:border-[var(--accent)]"
                     style={
                       isActive

@@ -886,13 +886,14 @@ export interface LandUseActionRow {
   kind: string | null;
   action: string | null;
   applicant: string | null;
+  parcel: string | null;
   decided_on: Date | null;
 }
 
 export function landUseActions(limit = 40, kind?: string) {
   if (kind) {
     return safeQuery<LandUseActionRow>(
-      `SELECT id, label, kind, action, applicant, decided_on
+      `SELECT id, label, kind, action, applicant, parcel, decided_on
          FROM land_use_actions
         WHERE kind = $2
         ORDER BY decided_on DESC NULLS LAST, id DESC
@@ -901,7 +902,7 @@ export function landUseActions(limit = 40, kind?: string) {
     );
   }
   return safeQuery<LandUseActionRow>(
-    `SELECT id, label, kind, action, applicant, decided_on
+    `SELECT id, label, kind, action, applicant, parcel, decided_on
        FROM land_use_actions
       ORDER BY decided_on DESC NULLS LAST, id DESC
       LIMIT $1`,

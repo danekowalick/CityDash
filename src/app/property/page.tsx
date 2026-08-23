@@ -44,6 +44,16 @@ const KIND_LABELS: Record<string, string> = {
   SUP: "Special Use Permit",
 };
 
+/**
+ * The county assessor's property search accepts a parcel number directly,
+ * which is the only stable way from one of these records to the property it
+ * concerns. The GIS layer carries no address.
+ */
+function assessorUrl(parcel: string): string {
+  return "https://id-latah.publicaccessnow.com/Assessor/PropertySearch.aspx?PIN=" +
+    encodeURIComponent(parcel);
+}
+
 function YearChart({ rows }: { rows: Array<{ year: number; total: string }> }) {
   const peak = Math.max(1, ...rows.map((r) => Number(r.total)));
   return (
@@ -169,6 +179,7 @@ export default async function PropertyPage({
               <div className="mb-4 flex flex-wrap gap-2">
                 <Link
                   href="/property"
+                  scroll={false}
                   className="card px-2.5 py-1 text-sm transition-colors hover:border-[var(--accent)]"
                   style={
                     kind ? undefined : { borderColor: "var(--accent)", background: "var(--accent-soft)" }
@@ -182,6 +193,7 @@ export default async function PropertyPage({
                     <Link
                       key={row.kind}
                       href={active ? "/property" : { pathname: "/property", query: { kind: row.kind } }}
+                      scroll={false}
                       className="card px-2.5 py-1 text-sm transition-colors hover:border-[var(--accent)]"
                       style={
                         active
@@ -225,6 +237,20 @@ export default async function PropertyPage({
                     {item.applicant ? (
                       <p className="muted mt-0.5 text-sm">Applicant: {item.applicant}</p>
                     ) : null}
+                    <p className="faint mt-1 text-xs">
+                      {item.parcel ? (
+                        <a
+                          href={assessorUrl(item.parcel)}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="link-underline"
+                        >
+                          Parcel {item.parcel}
+                        </a>
+                      ) : (
+                        <span>No parcel recorded</span>
+                      )}
+                    </p>
                   </Row>
                 ))}
               </RowList>
@@ -241,6 +267,66 @@ export default async function PropertyPage({
               The county publishes no legend for its type codes, so codes with no
               unambiguous reading are shown exactly as published.
             </p>
+
+            {/*
+              The county GIS gives a case label, a parcel and a one-line action --
+              no documents and no address. Saying plainly where the rest lives is
+              more use than a row that dead-ends.
+            */}
+            <div
+              className="card mt-4 p-4 text-sm"
+              style={{ background: "var(--opinion)" }}
+            >
+              <h3 className="font-semibold">Following one of these further</h3>
+              <p className="muted mt-2 max-w-prose">
+                These records come from the county&rsquo;s mapping layer, which carries a
+                case number, a parcel and a one-line description — no staff report, no
+                address, and no link to the file. Three routes go deeper:
+              </p>
+              <ul className="muted mt-2 max-w-prose list-disc space-y-1.5 pl-5">
+                <li>
+                  <strong>The vote.</strong> Conditional use permits and variances are
+                  decided in public by the{" "}
+                  <Link href="/meetings" className="link-underline">
+                    Board of Adjustment
+                  </Link>
+                  , and this site already holds those minutes — who moved, who seconded,
+                  and how each member voted.
+                </li>
+                <li>
+                  <strong>The property.</strong> Where a parcel number is recorded, the
+                  link on each row opens it in the{" "}
+                  <a
+                    href="https://id-latah.publicaccessnow.com/Assessor/PropertySearch.aspx"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="link-underline"
+                  >
+                    Latah County Assessor
+                  </a>{" "}
+                  search. Bear in mind Idaho publishes no sale price.
+                </li>
+                <li>
+                  <strong>The case file.</strong> Quote the case number to{" "}
+                  <a
+                    href="https://www.ci.moscow.id.us/151/Community-Development"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="link-underline"
+                  >
+                    Moscow Community Development
+                  </a>{" "}
+                  — applications, staff reports and conditions are held there, not
+                  published as open data.
+                </li>
+              </ul>
+              <p className="faint mt-2 max-w-prose">
+                Case numbering is not consistent between the county layer and the city
+                minutes — the same permit can appear as CUP26-018 in one and
+                LUP2026-0010 in the other — so this site does not link a row to its vote
+                automatically rather than risk pairing the wrong two.
+              </p>
+            </div>
           </section>
 
           {byYear.rows.length > 0 ? (

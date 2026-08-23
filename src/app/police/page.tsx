@@ -207,6 +207,7 @@ export default async function PolicePage({
           <div className="flex flex-wrap gap-2">
             <Link
               href="/police"
+              scroll={false}
               className="card px-2.5 py-1 text-sm transition-colors hover:border-[var(--accent)]"
               style={
                 type ? undefined : { borderColor: "var(--accent)", background: "var(--accent-soft)" }
@@ -224,6 +225,7 @@ export default async function PolicePage({
                       ? "/police"
                       : { pathname: "/police", query: { type: row.incident_type } }
                   }
+                  scroll={false}
                   className="card px-2.5 py-1 text-sm transition-colors hover:border-[var(--accent)]"
                   style={
                     active
@@ -265,7 +267,7 @@ export default async function PolicePage({
           }
           action={
             type ? (
-              <Link href="/police" className="link-underline text-sm">
+              <Link href="/police" scroll={false} className="link-underline text-sm">
                 Clear filter
               </Link>
             ) : undefined
