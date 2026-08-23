@@ -9,6 +9,7 @@ import { chapterHref, dynamicHref } from "@/lib/routes";
 import {
   adoptingMeeting,
   chaptersAmendedBy,
+  sectionsAmendedBy,
   codeReferencesForMeeting,
   motionsForMeeting,
   ordinances,
@@ -58,11 +59,33 @@ function ordinanceMotions<T extends { action: string }>(
 export default async function OrdinancePage({ params }: PageProps) {
   const { number } = await params;
 
-  const [chapters, all, adopting] = await Promise.all([
+  const [chapters, all, adopting, amended] = await Promise.all([
     chaptersAmendedBy(number),
     ordinances(500),
     adoptingMeeting(number),
+    sectionsAmendedBy(number),
   ]);
+
+  // Group the amended sections under their chapter for display.
+  const byChapter = new Map<
+    string,
+    { label: string; title: string; sections: typeof amended.rows }
+  >();
+  for (const row of amended.rows) {
+    const key = row.chapter_slug;
+    const existing = byChapter.get(key);
+    if (existing) existing.sections.push(row);
+    else
+      byChapter.set(key, {
+        label:
+          row.chapter_label && row.chapter_name
+            ? row.chapter_label + " — " + row.chapter_name
+            : row.chapter_slug,
+        title: row.title_name ?? "",
+        sections: [row],
+      });
+  }
+  const amendedGroups = [...byChapter.entries()];
 
   const ordinance = all.rows.find((o) => o.number === number) ?? null;
   const meeting = adopting.rows[0] ?? null;
@@ -132,7 +155,81 @@ export default async function OrdinancePage({ params }: PageProps) {
     {
       label: "What it changed",
       body:
-        chapters.rows.length > 0 ? (
+        amendedGroups.length > 0 ? (
+          <div>
+            <p className="muted mb-3 text-sm">
+              {pluralise(amended.rows.length, "section")} across{" "}
+              {pluralise(amendedGroups.length, "chapter")} carry this
+              ordinance in their amendment history. Open one to read the language it
+              now stands as.
+            </p>
+
+            <div className="space-y-4">
+              {amendedGroups.map(([slug, group]) => (
+                <div key={slug}>
+                  <h4 className="mb-1 text-sm font-medium">
+                    <Link href={chapterHref(slug)} className="hover:text-[var(--accent)]">
+                      {group.label}
+                    </Link>
+                    <span className="muted ml-2 font-normal">{group.title}</span>
+                  </h4>
+                  <ul className="card px-4">
+                    {group.sections.map((section) => (
+                      <li
+                        key={section.section_number}
+                        className="border-b py-2 last:border-b-0"
+                        style={{ borderColor: "var(--border)" }}
+                      >
+                        {section.section_text ? (
+                          <details>
+                            <summary className="cursor-pointer text-sm">
+                              <span className="mono font-medium">
+                                § {section.section_number}
+                              </span>
+                              {section.section_heading ? (
+                                <span className="muted ml-2">{section.section_heading}</span>
+                              ) : null}
+                            </summary>
+                            <p className="muted mt-2 max-w-prose text-sm leading-relaxed">
+                              {section.section_text.length > 2000
+                                ? section.section_text.slice(0, 2000) + " …"
+                                : section.section_text}
+                            </p>
+                          </details>
+                        ) : (
+                          <span className="text-sm">
+                            <span className="mono font-medium">
+                              § {section.section_number}
+                            </span>
+                            {section.section_heading ? (
+                              <span className="muted ml-2">{section.section_heading}</span>
+                            ) : null}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+
+            {/*
+              The distinction that matters, and the reason this is not a diff:
+              every chapter's first capture was August 2026, so for an older
+              ordinance there is no earlier text to compare against.
+            */}
+            <p
+              className="card mt-3 p-3 text-xs"
+              style={{ background: "var(--warn-soft)", color: "var(--warn)" }}
+            >
+              <strong>This is the wording as it now stands, not a before-and-after.</strong>{" "}
+              Showing what an ordinance struck out needs a copy of the chapter from
+              before it passed, and the first capture of every chapter here was taken in
+              August 2026. Amendments made from now on will be diffed properly — added
+              and removed language side by side — on the chapter&rsquo;s own page.
+            </p>
+          </div>
+        ) : chapters.rows.length > 0 ? (
           <div>
             <ul className="card px-4">
               {chapters.rows.map((row) => (
@@ -152,7 +249,9 @@ export default async function OrdinancePage({ params }: PageProps) {
               ))}
             </ul>
             <p className="faint mt-2 text-xs">
-              These chapters print this ordinance in their own amendment history.
+              These chapters cite this ordinance, but no individual section does —
+              usually because the citation sits in a chapter preamble rather than
+              against a numbered section.
             </p>
           </div>
         ) : null,

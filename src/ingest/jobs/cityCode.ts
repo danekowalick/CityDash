@@ -123,6 +123,38 @@ async function recordOrdinances(
   });
 }
 
+/**
+ * Attribute each section to the ordinances cited within it.
+ *
+ * The chapter-level link says an ordinance touched this chapter; this says
+ * which of its sections carry that ordinance's mark, which is what a reader
+ * actually wants when asking what an ordinance did.
+ */
+async function recordOrdinanceSections(
+  slug: string,
+  sections: CodeSection[],
+): Promise<void> {
+  await transaction(async (client) => {
+    await client.query(`DELETE FROM ordinance_sections WHERE chapter_slug = $1`, [slug]);
+
+    for (const section of sections) {
+      for (const citation of parseOrdinanceCitations(section.text)) {
+        // The ordinance row itself is written by recordOrdinances; this table
+        // deliberately carries no foreign key so a citation to an ordinance we
+        // have not otherwise seen is still recorded rather than dropped.
+        await client.query(
+          `INSERT INTO ordinance_sections
+             (ordinance_number, chapter_slug, section_number, section_heading)
+           VALUES ($1, $2, $3, $4)
+           ON CONFLICT (ordinance_number, chapter_slug, section_number)
+             DO UPDATE SET section_heading = EXCLUDED.section_heading`,
+          [citation.number, slug, section.number, section.heading || null],
+        );
+      }
+    }
+  });
+}
+
 export async function ingestCityCode(options: CityCodeJobOptions = {}): Promise<void> {
   const runId = await startRun(SOURCE_ID);
   let itemsSeen = 0;
@@ -229,6 +261,7 @@ export async function ingestCityCode(options: CityCodeJobOptions = {}): Promise<
       const versionId = Number(inserted[0].id);
 
       await recordOrdinances(chapter.slug, parseOrdinanceCitations(text));
+      await recordOrdinanceSections(chapter.slug, sections);
 
       if (previous && previous.id !== versionId) {
         const diff = diffChapterText(previous.text, text, previous.sections, sections);

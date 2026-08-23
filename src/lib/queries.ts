@@ -1136,3 +1136,43 @@ export function landUseSearchCount(term: string) {
     [likeTerm(term)],
   );
 }
+
+export interface AmendedSectionRow {
+  chapter_slug: string;
+  section_number: string;
+  section_heading: string | null;
+  chapter_label: string | null;
+  chapter_name: string | null;
+  title_name: string | null;
+  /** The section's text as it now stands, from the latest capture. */
+  section_text: string | null;
+}
+
+/**
+ * The sections an ordinance amended, with the language each now carries.
+ *
+ * This is not a before-and-after: the first capture of every chapter was
+ * taken in August 2026, so no earlier text exists to diff against for an
+ * older ordinance. What it shows is the wording that stands *because of*
+ * that ordinance, which is as close to "what it did" as the record allows.
+ */
+export function sectionsAmendedBy(ordinanceNumber: string) {
+  return safeQuery<AmendedSectionRow>(
+    `SELECT os.chapter_slug, os.section_number, os.section_heading,
+            c.chapter_label, c.chapter_name, c.title_name,
+            (
+              SELECT s->>'text'
+                FROM code_versions v,
+                     LATERAL jsonb_array_elements(v.sections) s
+               WHERE v.chapter_slug = os.chapter_slug
+                 AND s->>'number' = os.section_number
+               ORDER BY v.captured_at DESC
+               LIMIT 1
+            ) AS section_text
+       FROM ordinance_sections os
+       LEFT JOIN code_chapters c ON c.slug = os.chapter_slug
+      WHERE os.ordinance_number = $1
+      ORDER BY os.chapter_slug, os.section_number`,
+    [ordinanceNumber],
+  );
+}
