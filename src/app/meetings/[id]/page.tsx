@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
+import { MinutesViewer } from "@/components/MinutesViewer";
 import { MotionCard } from "@/components/Motion";
 import { MEETING_STATE_NOTE, MeetingStatusBadge, meetingState } from "@/components/MeetingStatus";
 import { Badge, SectionHeading } from "@/components/ui";
@@ -177,6 +178,22 @@ export default async function MeetingPage({ params }: PageProps) {
               </li>
             ))}
           </ul>
+        </section>
+      ) : null}
+
+      {record ? (
+        <section>
+          <SectionHeading
+            title="The minutes"
+            hint="Read them here rather than downloading the file."
+          />
+          <MinutesViewer
+            meetingId={meeting.id}
+            sourceUrl={record.minutes_url}
+            pageCount={record.page_count}
+            isScanned={record.is_scanned}
+            text={record.text}
+          />
         </section>
       ) : null}
 

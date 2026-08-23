@@ -546,11 +546,12 @@ export interface MinutesRow {
   is_scanned: boolean;
   motion_count: number;
   captured_at: Date;
+  text: string | null;
 }
 
 export function minutesForMeeting(meetingId: number) {
   return safeQuery<MinutesRow>(
-    `SELECT meeting_id, minutes_url, page_count, is_scanned, motion_count, captured_at
+    `SELECT meeting_id, minutes_url, page_count, is_scanned, motion_count, captured_at, text
        FROM meeting_minutes WHERE meeting_id = $1`,
     [meetingId],
   );
