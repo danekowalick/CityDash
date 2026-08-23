@@ -1,0 +1,18 @@
+<?xml version="1.0"?><rss version="2.0" xmlns:calendarEvent="https://www.ci.moscow.id.us/Calendar.aspx"><channel>
+	<title>Moscow, ID - Calendar</title>
+	<link>https://www.ci.moscow.id.us/Calendar.aspx</link>
+	<lastBuildDate>Sun, 23 Aug 2026 00:34:57 -0800</lastBuildDate>
+	<description>Moscow, ID - Get the latest events</description>
+	<language>en-us</language>
+	<item>
+		<title>Moscow Urban Renewal Agency Meeting</title>
+		<link>https://www.ci.moscow.id.us/Calendar.aspx?EID=6653</link>
+		<pubDate>Tue, 23 Dec 2025 10:59:30 -0800</pubDate>
+		<description>&lt;strong&gt;Event date:&lt;/strong&gt; September 3, 2026 &lt;br&gt;&lt;strong&gt;Event Time: &lt;/strong&gt;07:30 AM - 09:00 AM&lt;br&gt;&lt;strong&gt;Location:&lt;/strong&gt; &lt;br&gt;Second Floor&lt;br&gt;206 E 3rd St&lt;br&gt;Moscow, ID 83843&lt;br&gt;&lt;strong&gt;Description:&lt;/strong&gt;&lt;br&gt;The Agency’s purpose is to undertake the rehabilitation, conservation, development or redevelopment of areas identified by the City as being in the best interest of the public health, safety, morals or welfare of its residents.</description>
+		<calendarEvent:EventDates> September 3, 2026 </calendarEvent:EventDates>
+		<calendarEvent:EventTimes>07:30 AM - 09:00 AM</calendarEvent:EventTimes>
+		<calendarEvent:Location>Second Floor&lt;br&gt;206 E 3rd StMoscow, ID 83843</calendarEvent:Location>
+		
+		<guid isPermaLink="false">https://www.ci.moscow.id.us/Calendar.aspx?EID=6653/639020915700000000</guid>
+	</item>
+</channel></rss>

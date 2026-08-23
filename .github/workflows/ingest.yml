@@ -1,0 +1,79 @@
+# Scheduled ingestion.
+#
+# Ingestion runs here rather than on Vercel Cron: crawling many pages politely
+# takes minutes, which fits an Actions runner and does not fit a serverless
+# function timeout. The web app on Vercel only ever reads the database.
+#
+# Set DATABASE_URL and CITYDASH_USER_AGENT as repository secrets.
+
+name: Ingest
+
+on:
+  schedule:
+    # 07:15 UTC daily -- shortly after midnight Pacific, so the previous day's
+    # press log has been posted.
+    - cron: "15 7 * * *"
+    # Meetings change during the working day; refresh in the afternoon too.
+    - cron: "0 21 * * 1-5"
+    # The code changes rarely; check it weekly on Sunday.
+    - cron: "30 8 * * 0"
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Job to run (blank runs all)"
+        required: false
+        type: string
+      limit:
+        description: "Max daily logs to fetch"
+        required: false
+        default: "10"
+        type: string
+
+concurrency:
+  group: ingest
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      CITYDASH_USER_AGENT: ${{ secrets.CITYDASH_USER_AGENT }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      # Parsers are validated against saved real fixtures before anything is
+      # written to the database. A broken parser must not silently fill the
+      # site with garbage.
+      - name: Verify parsers
+        run: npm test
+
+      - name: Apply migrations
+        run: npm run db:migrate
+
+      - name: Ingest
+        run: npm run ingest -- ${{ inputs.job }} --limit ${{ inputs.limit || '10' }}
+
+      # Minutes appear days after a meeting, so this runs on the same daily
+      # schedule rather than needing its own trigger.
+      - name: Ingest meeting outcomes
+        if: inputs.job == '' || inputs.job == 'meeting-minutes'
+        run: npm run ingest:minutes
+
+      - name: Ingest city news and calendar feeds
+        if: inputs.job == ''
+        run: npm run ingest:news
+
+      # Zoning and land use change slowly; a weekly pass is plenty, but it is
+      # cheap enough to fold into the daily run.
+      - name: Ingest zoning and land use
+        if: inputs.job == ''
+        run: npm run ingest:property

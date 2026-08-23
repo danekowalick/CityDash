@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: citydash-db
+    environment:
+      POSTGRES_USER: citydash
+      POSTGRES_PASSWORD: citydash
+      POSTGRES_DB: citydash
+    ports:
+      - "55432:5432"
+    volumes:
+      - citydash-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U citydash"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  citydash-pgdata:

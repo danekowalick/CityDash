@@ -1,0 +1,45 @@
+{
+  "name": "city-dash",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A civic dashboard for Moscow, Idaho",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:migrate": "tsx src/ingest/migrate.ts",
+    "ingest": "tsx src/ingest/run.ts",
+    "ingest:police": "tsx src/ingest/run.ts police-press-logs",
+    "ingest:meetings": "tsx src/ingest/run.ts civicclerk-meetings",
+    "db:start": "bash scripts/localdb.sh start",
+    "db:stop": "bash scripts/localdb.sh stop",
+    "db:psql": "bash scripts/localdb.sh psql",
+    "ingest:code": "tsx src/ingest/run.ts city-code",
+    "ingest:minutes": "tsx src/ingest/run.ts meeting-minutes",
+    "ingest:news": "tsx src/ingest/run.ts city-news",
+    "ingest:property": "tsx src/ingest/run.ts latah-gis"
+  },
+  "dependencies": {
+    "diff": "^7.0.0",
+    "next": "^15.5.4",
+    "pdfjs-dist": "^4.10.38",
+    "pg": "^8.13.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.13",
+    "@types/diff": "^7.0.2",
+    "@types/node": "^22.10.5",
+    "@types/pg": "^8.11.10",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "tailwindcss": "^4.1.13",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}

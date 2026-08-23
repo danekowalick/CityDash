@@ -1,0 +1,15 @@
+node_modules/
+.next/
+out/
+build/
+.env
+.env.local
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+.vercel
+coverage/
+
+# Local portable Postgres (see scripts/localdb.sh)
+.localdb/
+tsconfig.tsbuildinfo

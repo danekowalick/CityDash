@@ -1,0 +1,156 @@
+@import "tailwindcss";
+
+/*
+ * One accent, a warm neutral ground, and generous whitespace. The site is
+ * dense with facts, so the design gets out of the way: no shadows-as-decoration,
+ * no gradients, no carousels. Hierarchy comes from type scale and spacing.
+ */
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+}
+
+:root {
+  --ground: #fbfaf8;
+  --surface: #ffffff;
+  --border: #e4e0d9;
+  --border-strong: #cfc9bf;
+  --ink: #1a1917;
+  --ink-muted: #5f5a52;
+  --ink-faint: #8a847a;
+  --accent: #1c5d78;
+  --accent-soft: #e8f1f5;
+  --warn: #8a5a00;
+  --warn-soft: #fdf3e0;
+  --alert: #8f2f2f;
+  --opinion: #f4f1ea;
+  --added-bg: #e4f2e6;
+  --added-ink: #1f6135;
+  --removed-bg: #fbe6e6;
+  --removed-ink: #93292b;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: #14140f;
+    --surface: #1c1c18;
+    --border: #32312c;
+    --border-strong: #46443d;
+    --ink: #f0ede7;
+    --ink-muted: #a8a298;
+    --ink-faint: #7d776d;
+    --accent: #7fc0dc;
+    --accent-soft: #16303c;
+    --warn: #e0aa5a;
+    --warn-soft: #2f2413;
+    --alert: #e08585;
+    --opinion: #222019;
+    --added-bg: #16301f;
+    --added-ink: #86d19c;
+    --removed-bg: #331a1a;
+    --removed-ink: #eb9a9a;
+  }
+}
+
+html {
+  color-scheme: light dark;
+}
+
+body {
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.55;
+}
+
+a {
+  color: inherit;
+}
+
+/* Utility layer -------------------------------------------------------- */
+
+.wrap {
+  width: 100%;
+  max-width: 68rem;
+  margin-inline: auto;
+  padding-inline: 1.25rem;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+}
+
+.rule {
+  border-color: var(--border);
+}
+
+.muted {
+  color: var(--ink-muted);
+}
+
+.faint {
+  color: var(--ink-faint);
+}
+
+.accent {
+  color: var(--accent);
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* A label above a number or section title. */
+.eyebrow {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.link-underline {
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 3px;
+}
+
+.link-underline:hover {
+  text-decoration-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Focus visibility is non-negotiable on a public civic site. */
+a:focus-visible,
+button:focus-visible,
+select:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Wide content scrolls inside its own box; the page never scrolls sideways. */
+.scroll-x {
+  overflow-x: auto;
+}
+
+/* Anchored sections must clear the sticky jump nav when linked to. */
+section[id],
+h2[id] {
+  scroll-margin-top: 5rem;
+}
+
+@media (min-width: 1024px) {
+  section[id],
+  h2[id] {
+    scroll-margin-top: 2rem;
+  }
+}
