@@ -45,12 +45,17 @@ const KIND_LABELS: Record<string, string> = {
 };
 
 /**
- * The county assessor's property search accepts a parcel number directly,
- * which is the only stable way from one of these records to the property it
- * concerns. The GIS layer carries no address.
+ * Deep link straight to the assessor's detail page for a parcel.
+ *
+ * The GIS layer carries no address, so the parcel number is the only stable
+ * way from one of these records to the property it concerns. The detail page
+ * takes the parcel as "p" and renders owner, address, acreage and value
+ * history; the "a" account parameter the assessor's own links include is not
+ * required. Linking at the search page instead just dumped the reader on an
+ * empty form.
  */
 function assessorUrl(parcel: string): string {
-  return "https://id-latah.publicaccessnow.com/Assessor/PropertySearch.aspx?PIN=" +
+  return "https://id-latah.publicaccessnow.com/Assessor/PropertySearch/Detail.aspx?p=" +
     encodeURIComponent(parcel);
 }
 
@@ -297,14 +302,15 @@ export default async function PropertyPage({
                   <strong>The property.</strong> Where a parcel number is recorded, the
                   link on each row opens it in the{" "}
                   <a
-                    href="https://id-latah.publicaccessnow.com/Assessor/PropertySearch.aspx"
+                    href="https://id-latah.publicaccessnow.com/Assessor/PropertySearch/Detail.aspx"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="link-underline"
                   >
                     Latah County Assessor
                   </a>{" "}
-                  search. Bear in mind Idaho publishes no sale price.
+                  record — owner, address, acreage and assessed value history. Bear in
+                  mind Idaho publishes no sale price.
                 </li>
                 <li>
                   <strong>The case file.</strong> Quote the case number to{" "}
