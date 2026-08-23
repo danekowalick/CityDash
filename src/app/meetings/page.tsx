@@ -12,12 +12,14 @@ import { Badge, EmptyState, Row, RowList, SectionHeading, Stat } from "@/compone
 import { formatDateTime, pluralise, relativeTime } from "@/lib/format";
 import { dynamicHref } from "@/lib/routes";
 import {
+  decisionFilterCounts,
   meetingFilterCounts,
   meetingOutcomeSummaries,
   outcomeStats,
   pastMeetingsFiltered,
   recentDecisions,
   upcomingMeetings,
+  type DecisionFilter,
   type MeetingFilter,
   type MeetingOutcomeSummary,
   type MeetingRow,
@@ -104,6 +106,30 @@ function MeetingEntry({
   );
 }
 
+const DECISION_FILTERS: Array<{ key: DecisionFilter; label: string; hint: string }> = [
+  { key: "all", label: "All", hint: "Every recorded motion." },
+  {
+    key: "carried",
+    label: "Passed",
+    hint: "Motions that carried. Note this is the motion passing, not necessarily a thing being approved.",
+  },
+  {
+    key: "failed",
+    label: "Did not pass",
+    hint: "Motions that failed, were tabled, or were withdrawn.",
+  },
+  {
+    key: "refusals",
+    label: "Motions to deny",
+    hint: "Motions to deny or reject something. Read the outcome alongside: a motion to deny that carried is a refusal; one that failed means the thing stood.",
+  },
+  {
+    key: "unstated",
+    label: "Outcome not stated",
+    hint: "The minutes record the motion but no result.",
+  },
+];
+
 const FILTERS: Array<{ key: MeetingFilter; label: string }> = [
   { key: "decisions", label: "With decisions" },
   { key: "all", label: "All" },
@@ -113,24 +139,31 @@ const FILTERS: Array<{ key: MeetingFilter; label: string }> = [
 export default async function MeetingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ show?: string }>;
+  searchParams: Promise<{ show?: string; outcome?: string }>;
 }) {
-  const { show } = await searchParams;
+  const { show, outcome } = await searchParams;
   const filter: MeetingFilter =
     show === "all" || show === "pending" ? show : "decisions";
 
-  const [upcoming, past, decisions, stats, summaries, counts] = await Promise.all([
+  const decisionFilter: DecisionFilter = DECISION_FILTERS.some((f) => f.key === outcome)
+    ? (outcome as DecisionFilter)
+    : "all";
+  const activeDecision = DECISION_FILTERS.find((f) => f.key === decisionFilter)!;
+
+  const [upcoming, past, decisions, stats, summaries, counts, decisionCounts] = await Promise.all([
     upcomingMeetings(20),
     pastMeetingsFiltered(40, filter),
-    recentDecisions(10),
+    recentDecisions(decisionFilter === "all" ? 10 : 60, decisionFilter),
     outcomeStats(),
     meetingOutcomeSummaries(),
     meetingFilterCounts(),
+    decisionFilterCounts(),
   ]);
 
   const summaryById = new Map(summaries.rows.map((s) => [s.meeting_id, s]));
   const totals = stats.rows[0] ?? null;
   const filterCounts = counts.rows[0] ?? null;
+  const decisionTotals = decisionCounts.rows[0] ?? null;
 
   const countFor = (key: MeetingFilter): number | undefined => {
     if (!filterCounts) return undefined;
@@ -140,7 +173,7 @@ export default async function MeetingsPage({
   };
 
   const sections: NavSection[] = [
-    { id: "decisions", label: "Recent decisions", count: decisions.rows.length },
+    { id: "decisions", label: "Decisions", count: decisions.rows.length },
     { id: "upcoming", label: "Upcoming", count: upcoming.rows.length },
     { id: "past", label: "Past meetings", count: past.rows.length },
     { id: "how", label: "How this is read" },
@@ -163,11 +196,19 @@ export default async function MeetingsPage({
       {totals && Number(totals.motions_total) > 0 ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Stat label="Decisions recorded" value={Number(totals.motions_total).toLocaleString("en-US")} />
-          <Stat label="Carried" value={totals.carried} />
           <Stat
-            label="Failed"
-            value={totals.failed}
+            label="Passed"
+            value={totals.carried}
+            detail="see them all"
+            href={dynamicHref("/meetings?outcome=carried")}
+          />
+          <Stat
+            label="Did not pass"
+            // Matches the filter, which counts tabled and withdrawn motions
+            // alongside failed ones -- all of them are a motion not passing.
+            value={decisionTotals ? decisionTotals.failed : totals.failed}
             detail={Number(totals.unstated) > 0 ? totals.unstated + " outcome not stated" : undefined}
+            href={dynamicHref("/meetings?outcome=failed")}
           />
           <Stat
             label="Minutes read"
@@ -181,14 +222,78 @@ export default async function MeetingsPage({
         <div className="space-y-10">
           <section id="decisions">
             <SectionHeading
-              title="Recent decisions"
+              title="Decisions"
               hint="Motions as recorded in the minutes, newest first."
             />
+
+            <div className="mb-3 flex flex-wrap gap-2">
+              {DECISION_FILTERS.map((option) => {
+                const active = decisionFilter === option.key;
+                const count = decisionTotals
+                  ? Number(decisionTotals[option.key as keyof typeof decisionTotals])
+                  : undefined;
+                return (
+                  <Link
+                    key={option.key}
+                    href={
+                      option.key === "all"
+                        ? "/meetings"
+                        : { pathname: "/meetings", query: { outcome: option.key } }
+                    }
+                    scroll={false}
+                    title={option.hint}
+                    className="card px-2.5 py-1 text-sm transition-colors hover:border-[var(--accent)]"
+                    style={
+                      active
+                        ? { borderColor: "var(--accent)", background: "var(--accent-soft)" }
+                        : undefined
+                    }
+                  >
+                    {option.label}
+                    {count !== undefined ? (
+                      <span className="faint mono ml-1.5">{count}</span>
+                    ) : null}
+                  </Link>
+                );
+              })}
+            </div>
+
+            {/* The unfiltered hint just restates the section heading. */}
+            {decisionFilter !== "all" ? (
+              <p className="muted mb-4 max-w-prose text-sm">{activeDecision.hint}</p>
+            ) : null}
+
+            {/*
+              Worth stating wherever these are filtered: the outcome describes
+              the motion, not the thing. "Deny the application of College Cabs"
+              carried -- that is the city refusing something, recorded as a
+              motion that passed.
+            */}
+            {decisionFilter === "carried" || decisionFilter === "refusals" ? (
+              <p
+                className="card mb-4 p-3 text-sm"
+                style={{ background: "var(--warn-soft)", color: "var(--warn)" }}
+              >
+                <strong>Carried means the motion passed, not that a thing was
+                approved.</strong>{" "}
+                A motion to <em>deny</em> that carried is the city voting something down.
+                Read the wording of each motion, not just its badge.
+              </p>
+            ) : null}
+
             {decisions.rows.length === 0 ? (
               <EmptyState
                 error={decisions.error}
-                emptyMessage="No decisions have been parsed yet."
-                hint="Run npm run ingest:minutes to read the published minutes."
+                emptyMessage={
+                  decisionFilter === "all"
+                    ? "No decisions have been parsed yet."
+                    : "No decisions match this filter."
+                }
+                hint={
+                  decisionFilter === "all"
+                    ? "Run npm run ingest:minutes to read the published minutes."
+                    : undefined
+                }
               />
             ) : (
               <ul className="card px-4">

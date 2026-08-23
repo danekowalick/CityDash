@@ -464,8 +464,33 @@ export interface RecentDecisionRow extends MotionRow {
   source_url: string;
 }
 
+/**
+ * How a decisions listing is narrowed.
+ *
+ * "refusals" is not an outcome but a shape of motion: a motion *to deny*
+ * something. It deserves its own filter because outcome alone is misleading
+ * there -- a motion to deny that carried is the city voting something down,
+ * while one that failed means the thing stood. Matching is a plain keyword
+ * test on the motion text, not an interpretation of it.
+ */
+export type DecisionFilter =
+  | "all"
+  | "carried"
+  | "failed"
+  | "unstated"
+  | "refusals";
+
+const DECISION_CLAUSE: Record<DecisionFilter, string> = {
+  all: "",
+  carried: "AND mo.outcome = 'carried'",
+  failed: "AND mo.outcome IN ('failed', 'withdrawn', 'tabled')",
+  unstated: "AND mo.outcome = 'unknown'",
+  refusals: "AND mo.action ~* '^(deny|denial|reject|refuse)'",
+};
+
 /** The newest recorded decisions across every body. */
-export function recentDecisions(limit = 40) {
+export function recentDecisions(limit = 40, filter: DecisionFilter = "all") {
+  const clause = DECISION_CLAUSE[filter] ?? "";
   return safeQuery<RecentDecisionRow>(
     `SELECT mo.id, mo.meeting_id, mo.sequence, mo.mover, mo.seconder, mo.action,
             mo.outcome, mo.ayes_raw, mo.nays_raw, mo.abstentions_raw,
@@ -473,9 +498,30 @@ export function recentDecisions(limit = 40) {
             m.body, m.starts_at, m.minutes_url, m.source_url
        FROM motions mo
        JOIN meetings m ON m.id = mo.meeting_id
+      WHERE TRUE ${clause}
       ORDER BY m.starts_at DESC, mo.sequence ASC
       LIMIT $1`,
     [limit],
+  );
+}
+
+export interface DecisionFilterCounts {
+  all: string;
+  carried: string;
+  failed: string;
+  unstated: string;
+  refusals: string;
+}
+
+export function decisionFilterCounts() {
+  return safeQuery<DecisionFilterCounts>(
+    `SELECT
+       COUNT(*) AS all,
+       COUNT(*) FILTER (WHERE outcome = 'carried') AS carried,
+       COUNT(*) FILTER (WHERE outcome IN ('failed', 'withdrawn', 'tabled')) AS failed,
+       COUNT(*) FILTER (WHERE outcome = 'unknown') AS unstated,
+       COUNT(*) FILTER (WHERE action ~* '^(deny|denial|reject|refuse)') AS refusals
+       FROM motions`,
   );
 }
 
