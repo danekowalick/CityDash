@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 import { WithSectionNav, type NavSection } from "@/components/SectionNav";
 import { Badge, EmptyState, Row, RowList, SectionHeading, Stat } from "@/components/ui";
 import { formatDate, formatDateTime, relativeTime } from "@/lib/format";
-import { dynamicHref } from "@/lib/routes";
+import { assetHref, dynamicHref } from "@/lib/routes";
 import { cityNews, meetingBodies, upcomingCalendar } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -113,7 +113,7 @@ export default async function CommunityPage() {
               title="Civic calendar"
               hint="Every published meeting for the next 45 days."
               action={
-                <a href="/calendar.ics" className="link-underline text-sm">
+                <a href={assetHref("/calendar.ics")} className="link-underline text-sm">
                   Subscribe (.ics)
                 </a>
               }
