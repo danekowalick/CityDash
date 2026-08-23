@@ -1,10 +1,13 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 
+import { SearchBox } from "@/components/SearchBox";
 import { WithSectionNav, type NavSection } from "@/components/SectionNav";
 import { Badge, EmptyState, Row, RowList, SectionHeading, Stat } from "@/components/ui";
 import { formatDate } from "@/lib/format";
 import {
+  landUseSearchCount,
+  searchLandUse,
   landUseActions,
   landUseByYear,
   landUseKinds,
@@ -97,17 +100,25 @@ function YearChart({ rows }: { rows: Array<{ year: number; total: string }> }) {
 export default async function PropertyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ kind?: string }>;
+  searchParams: Promise<{ kind?: string; q?: string }>;
 }) {
-  const { kind } = await searchParams;
+  const { kind, q } = await searchParams;
+  const term = (q ?? "").trim();
+  const searching = term.length > 0;
 
-  const [zoning, actions, kinds, byYear, stats] = await Promise.all([
+  // A search looks across every application; the type chips narrow the
+  // ordinary browse. Mixing the two silently would make results confusing,
+  // so a search takes precedence and the chips step aside.
+  const [zoning, actions, kinds, byYear, stats, hitCount] = await Promise.all([
     zoningSummary(),
-    landUseActions(60, kind),
+    searching ? searchLandUse(term, 80) : landUseActions(60, kind),
     landUseKinds(),
     landUseByYear(12),
     propertyStats(),
+    searching ? landUseSearchCount(term) : Promise.resolve(null),
   ]);
+
+  const totalHits = hitCount?.rows[0] ? Number(hitCount.rows[0].total) : undefined;
 
   const totals = stats.rows[0] ?? null;
 
@@ -152,6 +163,14 @@ export default async function PropertyPage({
         </div>
       ) : null}
 
+      <SearchBox
+        action="/property"
+        label="Search land use applications"
+        placeholder="Search applications — e.g. solar, setback, CUP26-018, a parcel or an applicant"
+        value={term || undefined}
+        resultCount={totalHits}
+      />
+
       <WithSectionNav sections={sections}>
         <div className="space-y-10">
           <section
@@ -176,11 +195,15 @@ export default async function PropertyPage({
 
           <section id="applications">
             <SectionHeading
-              title="Land use applications"
-              hint="Each one is a request to do something with a piece of land, decided in public."
+              title={searching ? "Matching applications" : "Land use applications"}
+              hint={
+                searching
+                  ? "Searching case numbers, descriptions, applicants and parcels."
+                  : "Each one is a request to do something with a piece of land, decided in public."
+              }
             />
 
-            {kinds.rows.length > 0 ? (
+            {kinds.rows.length > 0 && !searching ? (
               <div className="mb-4 flex flex-wrap gap-2">
                 <Link
                   href="/property"
@@ -218,8 +241,16 @@ export default async function PropertyPage({
             {actions.rows.length === 0 ? (
               <EmptyState
                 error={actions.error}
-                emptyMessage="No land use applications have been ingested yet."
-                hint="Run npm run ingest:property to pull the county GIS layers."
+                emptyMessage={
+                  searching
+                    ? "Nothing matches “" + term + "”."
+                    : "No land use applications have been ingested yet."
+                }
+                hint={
+                  searching
+                    ? "Search covers the case number, the description, the applicant and the parcel."
+                    : "Run npm run ingest:property to pull the county GIS layers."
+                }
               />
             ) : (
               <RowList>

@@ -7,11 +7,15 @@ import {
   MeetingStatusBadge,
   meetingState,
 } from "@/components/MeetingStatus";
+import { SearchBox } from "@/components/SearchBox";
 import { WithSectionNav, type NavSection } from "@/components/SectionNav";
 import { Badge, EmptyState, Row, RowList, SectionHeading, Stat } from "@/components/ui";
 import { formatDateTime, pluralise, relativeTime } from "@/lib/format";
 import { dynamicHref } from "@/lib/routes";
 import {
+  searchAgendaItems,
+  searchCounts,
+  searchDecisions,
   decisionFilterCounts,
   meetingFilterCounts,
   meetingOutcomeSummaries,
@@ -139,9 +143,11 @@ const FILTERS: Array<{ key: MeetingFilter; label: string }> = [
 export default async function MeetingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ show?: string; outcome?: string }>;
+  searchParams: Promise<{ show?: string; outcome?: string; q?: string }>;
 }) {
-  const { show, outcome } = await searchParams;
+  const { show, outcome, q } = await searchParams;
+  const term = (q ?? "").trim();
+  const searching = term.length > 0;
   const filter: MeetingFilter =
     show === "all" || show === "pending" ? show : "decisions";
 
@@ -160,6 +166,19 @@ export default async function MeetingsPage({
     decisionFilterCounts(),
   ]);
 
+  const [hits, agendaHits, hitCounts] = searching
+    ? await Promise.all([
+        searchDecisions(term, 60),
+        searchAgendaItems(term, 40),
+        searchCounts(term),
+      ])
+    : [null, null, null];
+
+  const counts0 = hitCounts?.rows[0] ?? null;
+  const totalHits = counts0
+    ? Number(counts0.decisions) + Number(counts0.agenda_items)
+    : undefined;
+
   const summaryById = new Map(summaries.rows.map((s) => [s.meeting_id, s]));
   const totals = stats.rows[0] ?? null;
   const filterCounts = counts.rows[0] ?? null;
@@ -173,6 +192,9 @@ export default async function MeetingsPage({
   };
 
   const sections: NavSection[] = [
+    ...(searching
+      ? [{ id: "results", label: "Search results", count: totalHits ?? 0 }]
+      : []),
     { id: "decisions", label: "Decisions", count: decisions.rows.length },
     { id: "upcoming", label: "Upcoming", count: upcoming.rows.length },
     { id: "past", label: "Past meetings", count: past.rows.length },
@@ -218,8 +240,89 @@ export default async function MeetingsPage({
         </div>
       ) : null}
 
+      <SearchBox
+        action="/meetings"
+        label="Search meetings and decisions"
+        placeholder="Search decisions, agenda items, members — e.g. ADU, Main Street, Blankenship"
+        value={term || undefined}
+        hidden={{ outcome: outcome, show: show }}
+        resultCount={totalHits}
+      />
+
       <WithSectionNav sections={sections}>
         <div className="space-y-10">
+          {searching ? (
+            <section id="results">
+              <SectionHeading
+                title="Search results"
+                hint={"Decisions and agenda items mentioning “" + term + "”."}
+              />
+
+              {hits && hits.rows.length > 0 ? (
+                <>
+                  <h3 className="eyebrow mb-2">
+                    Decisions ({counts0 ? counts0.decisions : hits.rows.length})
+                  </h3>
+                  <ul className="card mb-6 px-4">
+                    {hits.rows.map((hit) => (
+                      <MotionCard
+                        key={hit.id}
+                        motion={hit}
+                        context={
+                          <Link href={meetingHref(hit.meeting_id)} className="link-underline">
+                            {hit.body} · {formatDateTime(hit.starts_at)}
+                          </Link>
+                        }
+                      />
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+
+              {agendaHits && agendaHits.rows.length > 0 ? (
+                <>
+                  {/*
+                    Agenda items matter separately: plenty is discussed without
+                    ever reaching a motion, and a reader searching for a topic
+                    wants those too.
+                  */}
+                  <h3 className="eyebrow mb-2">
+                    Agenda items ({counts0 ? counts0.agenda_items : agendaHits.rows.length})
+                  </h3>
+                  <ul className="card px-4">
+                    {agendaHits.rows.map((item) => (
+                      <li
+                        key={item.meeting_id + "-" + item.number}
+                        className="border-b py-3 last:border-b-0"
+                        style={{ borderColor: "var(--border)" }}
+                      >
+                        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                          <span className="min-w-0 text-sm font-medium">{item.title}</span>
+                          {item.kind ? <Badge>{item.kind}</Badge> : null}
+                        </div>
+                        <Link
+                          href={meetingHref(item.meeting_id)}
+                          className="muted link-underline mt-0.5 inline-block text-sm"
+                        >
+                          {item.body} · {formatDateTime(item.starts_at)}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+
+              {(!hits || hits.rows.length === 0) &&
+              (!agendaHits || agendaHits.rows.length === 0) ? (
+                <EmptyState
+                  error={hits?.error ?? null}
+                  emptyMessage={"Nothing matches “" + term + "”."}
+                  hint="Search covers what was moved, who moved it, agenda item titles, and the body's name. Minutes that are scanned images cannot be searched."
+                />
+              ) : null}
+            </section>
+          ) : null}
+
           <section id="decisions">
             <SectionHeading
               title="Decisions"

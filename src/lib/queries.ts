@@ -986,3 +986,153 @@ export function policeFreshness() {
          ORDER BY started_at DESC LIMIT 1) AS last_status`,
   );
 }
+
+// ---------------------------------------------------------------------------
+// Keyword search
+// ---------------------------------------------------------------------------
+
+/**
+ * Substring matching rather than Postgres full-text.
+ *
+ * People search this data for case numbers ("CUP26-018"), fragments of a
+ * street name, or a surname. Full-text tokenising splits those awkwardly and
+ * stems words in ways that surprise; a plain case-insensitive substring match
+ * does what a reader expects. At these row counts it is not a performance
+ * question.
+ */
+/**
+ * "!" rather than the conventional backslash, deliberately.
+ *
+ * A backslash has to survive both a TypeScript string literal and a template
+ * literal on the way into the SQL, and it did not: `ESCAPE '!'` collapsed to
+ * an empty ESCAPE clause (no escape character at all) and the escaping in the term was
+ * swallowed too, so searching for "%" matched all 1,178 rows. "!" needs no
+ * escaping in either language, so what is written is what Postgres receives.
+ */
+const LIKE_ESCAPE = "!";
+
+export function likeTerm(term: string): string {
+  // Escape the escape character first, or "!" would eat the ones added after.
+  const escaped = term
+    .trim()
+    .replace(/!/g, "!!")
+    .replace(/%/g, "!%")
+    .replace(/_/g, "!_");
+  return "%" + escaped + "%";
+}
+
+export interface DecisionSearchRow extends RecentDecisionRow {
+  matched_in: string;
+}
+
+/** Motions matching a term, by what was moved or who moved it. */
+export function searchDecisions(term: string, limit = 50) {
+  return safeQuery<DecisionSearchRow>(
+    `SELECT mo.id, mo.meeting_id, mo.sequence, mo.mover, mo.seconder, mo.action,
+            mo.outcome, mo.ayes_raw, mo.nays_raw, mo.abstentions_raw,
+            mo.aye_count, mo.nay_count, mo.unanimous,
+            m.body, m.starts_at, m.minutes_url, m.source_url,
+            CASE
+              WHEN mo.action ILIKE $1 ESCAPE '!' THEN 'motion'
+              WHEN mo.mover ILIKE $1 ESCAPE '!' OR mo.seconder ILIKE $1 ESCAPE '!' THEN 'member'
+              ELSE 'meeting'
+            END AS matched_in
+       FROM motions mo
+       JOIN meetings m ON m.id = mo.meeting_id
+      WHERE mo.action ILIKE $1 ESCAPE '!'
+         OR mo.mover ILIKE $1 ESCAPE '!'
+         OR mo.seconder ILIKE $1 ESCAPE '!'
+         OR m.body ILIKE $1 ESCAPE '!'
+      ORDER BY m.starts_at DESC, mo.sequence
+      LIMIT $2`,
+    [likeTerm(term), limit],
+  );
+}
+
+export interface AgendaSearchRow {
+  meeting_id: number;
+  number: number;
+  title: string;
+  kind: string | null;
+  body: string;
+  starts_at: Date;
+}
+
+/** Agenda items matching a term -- catches things discussed but not voted on. */
+export function searchAgendaItems(term: string, limit = 40) {
+  return safeQuery<AgendaSearchRow>(
+    `SELECT a.meeting_id, a.number, a.title, a.kind, m.body, m.starts_at
+       FROM agenda_items a
+       JOIN meetings m ON m.id = a.meeting_id
+      WHERE a.title ILIKE $1 ESCAPE '!'
+      ORDER BY m.starts_at DESC, a.number
+      LIMIT $2`,
+    [likeTerm(term), limit],
+  );
+}
+
+export interface MeetingSearchRow extends MeetingRow {
+  motion_count: number | null;
+}
+
+/** Meetings whose body or description matches. */
+export function searchMeetings(term: string, limit = 30) {
+  return safeQuery<MeetingSearchRow>(
+    `SELECT ${MEETING_COLUMNS}, mm.motion_count
+       FROM meetings m
+       LEFT JOIN meeting_minutes mm ON mm.meeting_id = m.id
+      WHERE m.is_published
+        AND (m.body ILIKE $1 ESCAPE '!' OR m.description ILIKE $1 ESCAPE '!')
+      ORDER BY m.starts_at DESC
+      LIMIT $2`,
+    [likeTerm(term), limit],
+  );
+}
+
+export interface DecisionSearchCounts {
+  decisions: string;
+  agenda_items: string;
+  meetings: string;
+}
+
+export function searchCounts(term: string) {
+  const like = likeTerm(term);
+  return safeQuery<DecisionSearchCounts>(
+    `SELECT
+       (SELECT COUNT(*) FROM motions mo JOIN meetings m ON m.id = mo.meeting_id
+         WHERE mo.action ILIKE $1 ESCAPE '!' OR mo.mover ILIKE $1 ESCAPE '!'
+            OR mo.seconder ILIKE $1 ESCAPE '!' OR m.body ILIKE $1 ESCAPE '!') AS decisions,
+       (SELECT COUNT(*) FROM agenda_items WHERE title ILIKE $1 ESCAPE '!') AS agenda_items,
+       (SELECT COUNT(*) FROM meetings
+         WHERE is_published AND (body ILIKE $1 ESCAPE '!' OR description ILIKE $1 ESCAPE '!')) AS meetings`,
+    [like],
+  );
+}
+
+/** Land use applications matching a term. */
+export function searchLandUse(term: string, limit = 60) {
+  return safeQuery<LandUseActionRow>(
+    `SELECT id, label, kind, action, applicant, parcel, decided_on
+       FROM land_use_actions
+      WHERE action ILIKE $1 ESCAPE '!'
+         OR applicant ILIKE $1 ESCAPE '!'
+         OR label ILIKE $1 ESCAPE '!'
+         OR parcel ILIKE $1 ESCAPE '!'
+         OR kind ILIKE $1 ESCAPE '!'
+      ORDER BY decided_on DESC NULLS LAST, id DESC
+      LIMIT $2`,
+    [likeTerm(term), limit],
+  );
+}
+
+export function landUseSearchCount(term: string) {
+  return safeQuery<{ total: string }>(
+    `SELECT COUNT(*) AS total FROM land_use_actions
+      WHERE action ILIKE $1 ESCAPE '!'
+         OR applicant ILIKE $1 ESCAPE '!'
+         OR label ILIKE $1 ESCAPE '!'
+         OR parcel ILIKE $1 ESCAPE '!'
+         OR kind ILIKE $1 ESCAPE '!'`,
+    [likeTerm(term)],
+  );
+}
