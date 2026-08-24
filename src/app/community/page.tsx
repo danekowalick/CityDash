@@ -159,6 +159,12 @@ export default async function CommunityPage() {
                             ) : (
                               <span className="faint text-xs">No agenda yet</span>
                             )}
+                            <a
+                              href={assetHref("/meetings/" + entry.id + "/event.ics")}
+                              className="link-underline text-xs"
+                            >
+                              Add
+                            </a>
                             <span className="faint mono text-xs">
                               {new Date(entry.starts_at).toLocaleTimeString("en-US", {
                                 timeZone: "America/Los_Angeles",

@@ -2,6 +2,11 @@
  * Display formatting. Everything is rendered in Moscow's own time zone
  * regardless of where the reader or the server sits -- a council meeting is
  * at 7pm Moscow time, not 7pm wherever Vercel happened to run the request.
+ *
+ * Every absolute date carries its year. This site holds meetings back to 2020
+ * and ordinances to 2000, and they are read long after the fact: "Mon, Jul 20"
+ * stops being unambiguous the moment a second July is on the page. Only
+ * relativeTime is exempt, since "in 3 days" is anchored by definition.
  */
 
 export const CITY_TIME_ZONE = "America/Los_Angeles";
@@ -18,6 +23,7 @@ const shortDateFormatter = new Intl.DateTimeFormat("en-US", {
   timeZone: CITY_TIME_ZONE,
   month: "short",
   day: "numeric",
+  year: "numeric",
 });
 
 const dateTimeFormatter = new Intl.DateTimeFormat("en-US", {
@@ -25,6 +31,7 @@ const dateTimeFormatter = new Intl.DateTimeFormat("en-US", {
   weekday: "short",
   month: "short",
   day: "numeric",
+  year: "numeric",
   hour: "numeric",
   minute: "2-digit",
 });
@@ -44,10 +51,14 @@ export function formatCalendarDate(value: Date | string): string {
   }).format(date);
 }
 
-/** "Aug 7" for a calendar DATE column, without time-zone shifting. */
+/** "Aug 7, 2026" for a calendar DATE column, without time-zone shifting. */
 export function formatLogDayLabel(value: Date | string): string {
   const date = typeof value === "string" ? new Date(value + "T00:00:00") : value;
-  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(date);
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
 }
 
 export function formatDate(value: Date | string): string {

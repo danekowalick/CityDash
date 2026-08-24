@@ -165,7 +165,7 @@ export default async function PolicePage({
                     href={row.source_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="card min-w-[4.5rem] flex-1 p-2 text-center transition-colors hover:border-[var(--accent)]"
+                    className="card min-w-[5.5rem] flex-1 p-2 text-center transition-colors hover:border-[var(--accent)]"
                     title={
                       formatCalendarDate(row.log_date) +
                       ": " +

@@ -11,7 +11,7 @@ import { SearchBox } from "@/components/SearchBox";
 import { WithSectionNav, type NavSection } from "@/components/SectionNav";
 import { Badge, EmptyState, Row, RowList, SectionHeading, Stat } from "@/components/ui";
 import { formatDateTime, pluralise, relativeTime } from "@/lib/format";
-import { dynamicHref } from "@/lib/routes";
+import { assetHref, dynamicHref } from "@/lib/routes";
 import {
   searchAgendaItems,
   searchCounts,
@@ -103,6 +103,12 @@ function MeetingEntry({
             className="link-underline"
           >
             Video
+          </a>
+        ) : null}
+        {/* Only offered ahead of time -- adding a past meeting is no use. */}
+        {upcoming ? (
+          <a href={assetHref("/meetings/" + meeting.id + "/event.ics")} className="link-underline">
+            Add to calendar
           </a>
         ) : null}
       </div>

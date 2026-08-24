@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
 import { MinutesViewer } from "@/components/MinutesViewer";
+import { assetHref } from "@/lib/routes";
 import { PacketSection } from "@/components/Packet";
 import { MotionCard } from "@/components/Motion";
 import { MEETING_STATE_NOTE, MeetingStatusBadge, meetingState } from "@/components/MeetingStatus";
