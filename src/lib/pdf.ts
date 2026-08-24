@@ -54,12 +54,29 @@ export async function extractPdfText(bytes: Uint8Array): Promise<ExtractedPdf> {
   for (let pageNumber = 1; pageNumber <= doc.numPages; pageNumber++) {
     const page = await doc.getPage(pageNumber);
     const content = await page.getTextContent();
-    pages.push(joinTextItems(content.items));
+    pages.push(stripNulls(joinTextItems(content.items)));
     page.cleanup();
   }
 
   await doc.destroy();
   return { pages, pageCount: pages.length };
+}
+
+/**
+ * Remove NUL bytes from extracted text.
+ *
+ * A badly embedded font can put U+0000 into a glyph run. Postgres rejects it
+ * outright -- `invalid byte sequence for encoding "UTF8": 0x00` -- so a single
+ * such page aborts the whole insert. That surfaced on an agenda packet, where
+ * it was worse than a one-off failure: the packet was never recorded, so every
+ * later pass picked the same one up again and the backfill stopped advancing.
+ *
+ * A NUL carries no meaning in text pulled out of a PDF, and no consumer can
+ * store one, so it is dropped here at the single point where bytes become text
+ * rather than in each parser.
+ */
+export function stripNulls(text: string): string {
+  return text.replace(/\u0000/g, "");
 }
 
 interface PositionedItem {

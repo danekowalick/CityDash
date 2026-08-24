@@ -285,6 +285,7 @@ export async function ingestPackets(options: PacketJobOptions = {}): Promise<voi
   let itemsSeen = 0;
   let itemsNew = 0;
   let unbalanced = 0;
+  let failed = 0;
 
   try {
     const meetings = await pendingPackets(limit, days, options.force ?? false);
@@ -323,15 +324,30 @@ export async function ingestPackets(options: PacketJobOptions = {}): Promise<voi
 
       const parsed = parsePacket(extracted.pages);
 
-      const rawDocumentId = await storeRawDocument(SOURCE_ID, {
-        url: meeting.packet_url,
-        status: pdf.status,
-        body: parsed.text,
-        contentType: pdf.contentType,
-        contentHash: pdf.contentHash,
-      });
+      // A packet that will not store must not take the rest of the run down
+      // with it. Because a failure here leaves the packet unrecorded, an
+      // unguarded throw meant the next pass picked the same one up again and
+      // the backfill stopped advancing entirely -- one unreadable packet cost
+      // every packet behind it. Skipping keeps the run moving and the failure
+      // stays visible in the log and in the fetch_runs error count.
+      try {
+        const rawDocumentId = await storeRawDocument(SOURCE_ID, {
+          url: meeting.packet_url,
+          status: pdf.status,
+          body: parsed.text,
+          contentType: pdf.contentType,
+          contentHash: pdf.contentHash,
+        });
 
-      await persist(meeting, parsed, pdf.contentHash, byteSize, rawDocumentId);
+        await persist(meeting, parsed, pdf.contentHash, byteSize, rawDocumentId);
+      } catch (error) {
+        failed++;
+        console.warn(
+          "  store failed for meeting " + meeting.id + " (" + label + "): " +
+            String(error).slice(0, 160),
+        );
+        continue;
+      }
       itemsNew++;
 
       if (parsed.isScanned) {
