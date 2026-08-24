@@ -63,6 +63,25 @@ export const SOURCES: SourceDefinition[] = [
     enabled: true,
   },
   {
+    id: "agenda-packets",
+    name: "Agenda Packets & Spending",
+    url: "https://moscowid.portal.civicclerk.com/",
+    kind: "scrape",
+    cadence: "daily",
+    publisher: "City of Moscow (CivicClerk portal)",
+    termsNote:
+      "The packet is the meeting material the City publishes alongside each agenda, served " +
+      "without login through its own portal. We read the same PDF the portal serves " +
+      "anonymously and store only extracted text, never the file. What we keep is the parts " +
+      "a reader can act on -- the agenda, the check register, the disbursement report and " +
+      "each staff report; the contracts and engineering specifications bound in behind them " +
+      "are left as page references back to the City's own PDF. The register lists payments " +
+      "submitted to Council for approval, which is not the same thing as money already " +
+      "spent, and our reading of it is published alongside the total the City printed on it " +
+      "so the two can be compared.",
+    enabled: true,
+  },
+  {
     id: "latah-gis",
     name: "Latah County GIS — Zoning & Land Use",
     url: "https://gis.latah.id.us/arcgis/rest/services",

@@ -36,7 +36,7 @@ concurrency:
 jobs:
   ingest:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       CITYDASH_USER_AGENT: ${{ secrets.CITYDASH_USER_AGENT }}
@@ -67,6 +67,15 @@ jobs:
       - name: Ingest meeting outcomes
         if: inputs.job == '' || inputs.job == 'meeting-minutes'
         run: npm run ingest:minutes
+
+      # Packets are ~20MB each and take 20-60s of PDF extraction, so the
+      # nightly run takes only a small bite. Already-read packets are skipped
+      # in SQL without being fetched, so each run advances by new ones. A
+      # backfill of the archive belongs on the self-hosted box, not here --
+      # it runs for hours and this job times out at 45 minutes.
+      - name: Ingest agenda packets
+        if: inputs.job == '' || inputs.job == 'agenda-packets'
+        run: npm run ingest:packets -- --limit 4 --days 45
 
       - name: Ingest city news and calendar feeds
         if: inputs.job == ''

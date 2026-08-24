@@ -13,12 +13,13 @@ export const metadata: Metadata = {
 };
 
 /**
- * Six flat sections. Nothing is nested in a submenu: the rule for this site
+ * Seven flat sections. Nothing is nested in a submenu: the rule for this site
  * is at most two clicks from the front page to any record, and three to the
  * primary source document behind it.
  */
 const NAV = [
   { href: "/meetings", label: "Meetings" },
+  { href: "/spending", label: "Spending" },
   { href: "/police", label: "Police" },
   { href: "/code", label: "Code & Courts" },
   { href: "/property", label: "Property" },

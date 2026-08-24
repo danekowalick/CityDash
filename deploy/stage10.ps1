@@ -10,6 +10,7 @@ $stamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
 & npx tsx src/ingest/run.ts police-press-logs --limit 40 *>> 'C:\apps\city-dash\ingest.log'
 & npx tsx src/ingest/run.ts civicclerk-meetings --days 400  *>> 'C:\apps\city-dash\ingest.log'
 & npx tsx src/ingest/run.ts meeting-minutes --limit 60      *>> 'C:\apps\city-dash\ingest.log'
+& npx tsx src/ingest/run.ts agenda-packets --limit 6 --days 60 *>> 'C:\apps\city-dash\ingest.log'
 & npx tsx src/ingest/run.ts city-news                       *>> 'C:\apps\city-dash\ingest.log'
 & npx tsx src/ingest/run.ts city-code                       *>> 'C:\apps\city-dash\ingest.log'
 & npx tsx src/ingest/run.ts latah-gis                       *>> 'C:\apps\city-dash\ingest.log'

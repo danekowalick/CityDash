@@ -91,6 +91,42 @@ export function pluralise(count: number, singular: string, plural?: string): str
   return count + " " + (count === 1 ? singular : (plural ?? singular + "s"));
 }
 
+const moneyFormatter = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+});
+
+/**
+ * Money is stored and passed around as whole cents.
+ *
+ * Amounts come off a printed register where every figure has exactly two
+ * decimal places, so cents are exact and integers keep them that way -- a
+ * float would start disagreeing with the city's own printed total, which is
+ * the one number we check ourselves against. Postgres hands BIGINT back as a
+ * string, so both forms are accepted.
+ *
+ * A refund is shown in parentheses, the way the register itself prints it.
+ */
+export function formatMoneyCents(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) return "—";
+  const cents = typeof value === "string" ? Number(value) : value;
+  if (!Number.isFinite(cents)) return "—";
+  const formatted = moneyFormatter.format(Math.abs(cents) / 100);
+  return cents < 0 ? "(" + formatted + ")" : formatted;
+}
+
+/** "$2.4M", "$395K", "$603" -- for stat tiles, where precision is noise. */
+export function formatMoneyShort(value: string | number | null | undefined): string {
+  if (value === null || value === undefined) return "—";
+  const cents = typeof value === "string" ? Number(value) : value;
+  if (!Number.isFinite(cents)) return "—";
+  const dollars = Math.abs(cents) / 100;
+  const sign = cents < 0 ? "-" : "";
+  if (dollars >= 1_000_000) return sign + "$" + (dollars / 1_000_000).toFixed(1) + "M";
+  if (dollars >= 1_000) return sign + "$" + Math.round(dollars / 1_000) + "K";
+  return sign + "$" + Math.round(dollars);
+}
+
 /**
  * Moscow PD disposition codes, expanded. The published logs use the codes
  * bare; a reader should never have to guess what "ACT" means.

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 
 import { MinutesViewer } from "@/components/MinutesViewer";
+import { PacketSection } from "@/components/Packet";
 import { MotionCard } from "@/components/Motion";
 import { MEETING_STATE_NOTE, MeetingStatusBadge, meetingState } from "@/components/MeetingStatus";
 import { Badge, SectionHeading } from "@/components/ui";
@@ -12,6 +13,11 @@ import {
   meetingById,
   minutesForMeeting,
   motionsForMeeting,
+  packetForMeeting,
+  packetSegmentsForMeeting,
+  paymentsForMeeting,
+  registerBatchesForMeeting,
+  staffReportsForMeeting,
 } from "@/lib/queries";
 
 export const dynamic = "force-dynamic";
@@ -36,12 +42,18 @@ export default async function MeetingPage({ params }: PageProps) {
   const meetingId = Number(id);
   if (!Number.isFinite(meetingId)) notFound();
 
-  const [found, motions, agenda, minutes] = await Promise.all([
-    meetingById(meetingId),
-    motionsForMeeting(meetingId),
-    agendaItemsForMeeting(meetingId),
-    minutesForMeeting(meetingId),
-  ]);
+  const [found, motions, agenda, minutes, packet, segments, batches, payments, reports] =
+    await Promise.all([
+      meetingById(meetingId),
+      motionsForMeeting(meetingId),
+      agendaItemsForMeeting(meetingId),
+      minutesForMeeting(meetingId),
+      packetForMeeting(meetingId),
+      packetSegmentsForMeeting(meetingId),
+      registerBatchesForMeeting(meetingId),
+      paymentsForMeeting(meetingId),
+      staffReportsForMeeting(meetingId),
+    ]);
 
   const meeting = found.rows[0];
   if (!meeting && found.error === null) notFound();
@@ -179,6 +191,18 @@ export default async function MeetingPage({ params }: PageProps) {
             ))}
           </ul>
         </section>
+      ) : null}
+
+      {/* The packet -------------------------------------------------------
+          The agenda names an item; the packet is where its cost is. */}
+      {packet.rows[0] ? (
+        <PacketSection
+          packet={packet.rows[0]}
+          segments={segments.rows}
+          batches={batches.rows}
+          payments={payments.rows}
+          reports={reports.rows}
+        />
       ) : null}
 
       {record ? (

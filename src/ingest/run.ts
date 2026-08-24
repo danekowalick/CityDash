@@ -15,6 +15,7 @@ import { ingestMeetings } from "./jobs/meetings";
 import { ingestCityCode } from "./jobs/cityCode";
 import { ingestCityNews } from "./jobs/cityNews";
 import { ingestMinutes } from "./jobs/minutes";
+import { ingestPackets } from "./jobs/packets";
 import { ingestPressLogs } from "./jobs/pressLogs";
 import { ingestProperty } from "./jobs/property";
 
@@ -34,6 +35,11 @@ const JOBS: JobDefinition[] = [
     name: "civicclerk-meetings",
     description: "City of Moscow public meetings",
     run: (options) => ingestMeetings({ pastDays: options.days }),
+  },
+  {
+    name: "agenda-packets",
+    description: "Spending read from the packets bound behind each agenda",
+    run: (options) => ingestPackets(options),
   },
   {
     name: "meeting-minutes",

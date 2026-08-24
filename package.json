@@ -19,6 +19,7 @@
     "db:psql": "bash scripts/localdb.sh psql",
     "ingest:code": "tsx src/ingest/run.ts city-code",
     "ingest:minutes": "tsx src/ingest/run.ts meeting-minutes",
+    "ingest:packets": "tsx src/ingest/run.ts agenda-packets",
     "ingest:news": "tsx src/ingest/run.ts city-news",
     "ingest:property": "tsx src/ingest/run.ts latah-gis"
   },

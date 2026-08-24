@@ -1177,3 +1177,469 @@ export function sectionsAmendedBy(ordinanceNumber: string) {
     [ordinanceNumber],
   );
 }
+
+// ---------------------------------------------------------------------------
+// Spending, read from agenda packets
+// ---------------------------------------------------------------------------
+
+/*
+ * Every aggregate here is restricted to `trusted` register batches.
+ *
+ * A batch is trusted when our sum equals the total the register printed and we
+ * read as many pages as its banner says it has. A batch that fails either test
+ * is still recorded, and the meeting page says so and links to the PDF -- but
+ * it never reaches a total, because publishing 17 lines of a 400-line register
+ * would understate the city's spending far more damagingly than admitting we
+ * could not read it.
+ */
+const TRUSTED_JOIN = `JOIN check_register_batches b ON b.id = cp.batch_id AND b.trusted`;
+
+export interface SpendingFilters {
+  fund?: string;
+  account?: string;
+  from?: string;
+  to?: string;
+}
+
+/** Build the optional WHERE fragments shared by the filtered queries. */
+function spendingWhere(
+  filters: SpendingFilters,
+  params: unknown[],
+): string {
+  const clauses: string[] = [];
+  if (filters.fund) {
+    params.push(filters.fund);
+    clauses.push(`cp.fund = $${params.length}`);
+  }
+  if (filters.account) {
+    params.push(filters.account);
+    clauses.push(`cp.account = $${params.length}`);
+  }
+  if (filters.from) {
+    params.push(filters.from);
+    clauses.push(`cp.check_date >= $${params.length}::date`);
+  }
+  if (filters.to) {
+    params.push(filters.to);
+    clauses.push(`cp.check_date <= $${params.length}::date`);
+  }
+  return clauses.length > 0 ? " AND " + clauses.join(" AND ") : "";
+}
+
+export interface SpendingStatsRow {
+  payment_total_cents: string;
+  payment_count: string;
+  vendor_count: string;
+  packets_read: string;
+  registers_trusted: string;
+  registers_untrusted: string;
+  earliest_check: Date | null;
+  latest_check: Date | null;
+}
+
+export function spendingStats() {
+  return safeQuery<SpendingStatsRow>(
+    `SELECT
+       COALESCE((SELECT SUM(cp.amount_cents) FROM check_payments cp ${TRUSTED_JOIN}), 0)::text
+         AS payment_total_cents,
+       (SELECT COUNT(*) FROM check_payments cp ${TRUSTED_JOIN})::text AS payment_count,
+       (SELECT COUNT(DISTINCT cp.vendor_key) FROM check_payments cp ${TRUSTED_JOIN})::text
+         AS vendor_count,
+       (SELECT COUNT(*) FROM meeting_packets)::text AS packets_read,
+       (SELECT COUNT(*) FROM check_register_batches WHERE trusted)::text AS registers_trusted,
+       (SELECT COUNT(*) FROM check_register_batches WHERE NOT trusted)::text AS registers_untrusted,
+       (SELECT MIN(cp.check_date) FROM check_payments cp ${TRUSTED_JOIN}) AS earliest_check,
+       (SELECT MAX(cp.check_date) FROM check_payments cp ${TRUSTED_JOIN}) AS latest_check`,
+  );
+}
+
+export interface VendorRollupRow {
+  vendor_key: string;
+  vendor_name: string;
+  payment_count: string;
+  total_cents: string;
+  meeting_count: string;
+  last_check: Date | null;
+}
+
+/**
+ * Who the city pays, largest first.
+ *
+ * Grouped by the normalised key, but displayed under the spelling the register
+ * printed most often -- it writes "WHITCOM 911" one fortnight and "Whitcom 911"
+ * the next, and picking the commonest is better than picking whichever sorted
+ * first.
+ */
+export function topVendors(limit = 60, filters: SpendingFilters = {}) {
+  const params: unknown[] = [limit];
+  const where = spendingWhere(filters, params);
+  return safeQuery<VendorRollupRow>(
+    `SELECT cp.vendor_key,
+            mode() WITHIN GROUP (ORDER BY cp.vendor_name) AS vendor_name,
+            COUNT(*)::text AS payment_count,
+            SUM(cp.amount_cents)::text AS total_cents,
+            COUNT(DISTINCT cp.meeting_id)::text AS meeting_count,
+            MAX(cp.check_date) AS last_check
+       FROM check_payments cp ${TRUSTED_JOIN}
+      WHERE TRUE ${where}
+      GROUP BY cp.vendor_key
+      ORDER BY SUM(cp.amount_cents) DESC
+      LIMIT $1`,
+    params,
+  );
+}
+
+export interface PaymentRowRecord {
+  id: string;
+  meeting_id: number;
+  body: string;
+  starts_at: Date;
+  check_number: string | null;
+  check_date: Date | null;
+  vendor_name: string;
+  vendor_key: string;
+  account: string | null;
+  fund: string | null;
+  amount_cents: string;
+  amount_repaired: boolean;
+  amount_uncertain: boolean;
+  page: number | null;
+  packet_url: string | null;
+}
+
+const PAYMENT_COLUMNS = `cp.id::text, cp.meeting_id, m.body, m.starts_at,
+       cp.check_number, cp.check_date, cp.vendor_name, cp.vendor_key,
+       cp.account, cp.fund, cp.amount_cents::text, cp.amount_repaired,
+       cp.amount_uncertain, cp.page, mp.packet_url`;
+
+/** The largest individual payments, which is what a reader looks for first. */
+export function largestPayments(limit = 40, filters: SpendingFilters = {}) {
+  const params: unknown[] = [limit];
+  const where = spendingWhere(filters, params);
+  return safeQuery<PaymentRowRecord>(
+    `SELECT ${PAYMENT_COLUMNS}
+       FROM check_payments cp
+       ${TRUSTED_JOIN}
+       JOIN meetings m ON m.id = cp.meeting_id
+       LEFT JOIN meeting_packets mp ON mp.meeting_id = cp.meeting_id
+      WHERE TRUE ${where}
+      ORDER BY cp.amount_cents DESC
+      LIMIT $1`,
+    params,
+  );
+}
+
+export function paymentsForVendor(vendorKey: string, limit = 300) {
+  return safeQuery<PaymentRowRecord>(
+    `SELECT ${PAYMENT_COLUMNS}
+       FROM check_payments cp
+       ${TRUSTED_JOIN}
+       JOIN meetings m ON m.id = cp.meeting_id
+       LEFT JOIN meeting_packets mp ON mp.meeting_id = cp.meeting_id
+      WHERE cp.vendor_key = $1
+      ORDER BY cp.check_date DESC NULLS LAST, cp.amount_cents DESC
+      LIMIT $2`,
+    [vendorKey, limit],
+  );
+}
+
+export interface GroupTotalRow {
+  label: string | null;
+  total_cents: string;
+  payment_count: string;
+}
+
+export function fundTotals(filters: SpendingFilters = {}) {
+  const params: unknown[] = [];
+  const where = spendingWhere(filters, params);
+  return safeQuery<GroupTotalRow>(
+    `SELECT cp.fund AS label, SUM(cp.amount_cents)::text AS total_cents,
+            COUNT(*)::text AS payment_count
+       FROM check_payments cp ${TRUSTED_JOIN}
+      WHERE TRUE ${where}
+      GROUP BY cp.fund
+      ORDER BY SUM(cp.amount_cents) DESC`,
+    params,
+  );
+}
+
+export function accountTotals(limit = 40, filters: SpendingFilters = {}) {
+  const params: unknown[] = [limit];
+  const where = spendingWhere(filters, params);
+  return safeQuery<GroupTotalRow>(
+    `SELECT cp.account AS label, SUM(cp.amount_cents)::text AS total_cents,
+            COUNT(*)::text AS payment_count
+       FROM check_payments cp ${TRUSTED_JOIN}
+      WHERE TRUE ${where}
+      GROUP BY cp.account
+      ORDER BY SUM(cp.amount_cents) DESC
+      LIMIT $1`,
+    params,
+  );
+}
+
+export interface PaymentSearchRow extends PaymentRowRecord {
+  matched_in: string;
+}
+
+/**
+ * Search the payments.
+ *
+ * ILIKE against the parsed columns, deliberately -- not full-text over the
+ * packet. Readers search for a firm name, a fund, or an account fragment, and
+ * more importantly the raw packet carries 150-odd pages of contract and
+ * engineering boilerplate per meeting: a search for "legal" across it returns
+ * twenty hits of "ARTICLE 13. LEGAL FEES" and one real payment.
+ */
+export function searchPayments(term: string, limit = 80) {
+  return safeQuery<PaymentSearchRow>(
+    `SELECT ${PAYMENT_COLUMNS},
+            CASE
+              WHEN cp.vendor_name ILIKE $1 ESCAPE '!' THEN 'vendor'
+              WHEN cp.account ILIKE $1 ESCAPE '!' THEN 'account'
+              ELSE 'fund'
+            END AS matched_in
+       FROM check_payments cp
+       ${TRUSTED_JOIN}
+       JOIN meetings m ON m.id = cp.meeting_id
+       LEFT JOIN meeting_packets mp ON mp.meeting_id = cp.meeting_id
+      WHERE cp.vendor_name ILIKE $1 ESCAPE '!'
+         OR cp.account ILIKE $1 ESCAPE '!'
+         OR cp.fund ILIKE $1 ESCAPE '!'
+      ORDER BY cp.amount_cents DESC
+      LIMIT $2`,
+    [likeTerm(term), limit],
+  );
+}
+
+export interface StaffReportRow {
+  id: string;
+  meeting_id: number;
+  body: string;
+  starts_at: Date;
+  sequence: number;
+  agenda_item_title: string | null;
+  responsible_staff: string | null;
+  description: string | null;
+  proposed_actions: string | null;
+  fiscal_impact: string | null;
+  fiscal_max_cents: string | null;
+  start_page: number | null;
+  end_page: number | null;
+  packet_url: string | null;
+}
+
+const STAFF_REPORT_COLUMNS = `sr.id::text, sr.meeting_id, m.body, m.starts_at, sr.sequence,
+       sr.agenda_item_title, sr.responsible_staff, sr.description, sr.proposed_actions,
+       sr.fiscal_impact, sr.fiscal_max_cents::text, sr.start_page, sr.end_page, mp.packet_url`;
+
+/**
+ * Search the staff reports.
+ *
+ * Covers the description and the proposed actions as well as the fiscal
+ * impact, because the fiscal impact field is frequently left blank: the FY2027
+ * appropriation ordinance is a $149,942,154 budget whose FISCAL IMPACT is
+ * empty, with every figure sitting in the description instead.
+ */
+export function searchStaffReports(term: string, limit = 40) {
+  return safeQuery<StaffReportRow>(
+    `SELECT ${STAFF_REPORT_COLUMNS}
+       FROM packet_staff_reports sr
+       JOIN meetings m ON m.id = sr.meeting_id
+       LEFT JOIN meeting_packets mp ON mp.meeting_id = sr.meeting_id
+      WHERE sr.agenda_item_title ILIKE $1 ESCAPE '!'
+         OR sr.fiscal_impact ILIKE $1 ESCAPE '!'
+         OR sr.description ILIKE $1 ESCAPE '!'
+         OR sr.proposed_actions ILIKE $1 ESCAPE '!'
+      ORDER BY m.starts_at DESC, sr.sequence
+      LIMIT $2`,
+    [likeTerm(term), limit],
+  );
+}
+
+export interface PacketSegmentHitRow {
+  id: string;
+  meeting_id: number;
+  body: string;
+  starts_at: Date;
+  kind: string;
+  title: string | null;
+  start_page: number;
+  end_page: number;
+  packet_url: string | null;
+  excerpt: string;
+}
+
+/**
+ * Search the parts of the packet kept as text but not parsed into rows -- above
+ * all the Major Expenditures page, which is the only place a payment made in
+ * the previous month appears at all.
+ *
+ * Restricted to the readable segments. Attachments carry no text by design, so
+ * this cannot reach the boilerplate.
+ */
+export function searchPacketSegments(term: string, limit = 30) {
+  return safeQuery<PacketSegmentHitRow>(
+    `SELECT s.id::text, s.meeting_id, m.body, m.starts_at, s.kind, s.title,
+            s.start_page, s.end_page, mp.packet_url,
+            substring(s.text from greatest(1, position(lower($3) in lower(s.text)) - 90) for 260)
+              AS excerpt
+       FROM packet_segments s
+       JOIN meetings m ON m.id = s.meeting_id
+       LEFT JOIN meeting_packets mp ON mp.meeting_id = s.meeting_id
+      WHERE s.text IS NOT NULL
+        AND s.kind IN ('major_expenditures', 'disbursement_report', 'agenda')
+        AND s.text ILIKE $1 ESCAPE '!'
+      ORDER BY m.starts_at DESC, s.sequence
+      LIMIT $2`,
+    [likeTerm(term), limit, term.trim()],
+  );
+}
+
+export interface SpendingSearchCountRow {
+  payments: string;
+  staff_reports: string;
+  segments: string;
+}
+
+export function spendingSearchCounts(term: string) {
+  return safeQuery<SpendingSearchCountRow>(
+    `SELECT
+       (SELECT COUNT(*) FROM check_payments cp ${TRUSTED_JOIN}
+         WHERE cp.vendor_name ILIKE $1 ESCAPE '!' OR cp.account ILIKE $1 ESCAPE '!'
+            OR cp.fund ILIKE $1 ESCAPE '!')::text AS payments,
+       (SELECT COUNT(*) FROM packet_staff_reports sr
+         WHERE sr.agenda_item_title ILIKE $1 ESCAPE '!' OR sr.fiscal_impact ILIKE $1 ESCAPE '!'
+            OR sr.description ILIKE $1 ESCAPE '!' OR sr.proposed_actions ILIKE $1 ESCAPE '!')::text
+         AS staff_reports,
+       (SELECT COUNT(*) FROM packet_segments s
+         WHERE s.text IS NOT NULL
+           AND s.kind IN ('major_expenditures', 'disbursement_report', 'agenda')
+           AND s.text ILIKE $1 ESCAPE '!')::text AS segments`,
+    [likeTerm(term)],
+  );
+}
+
+// --- The packet behind one meeting ------------------------------------------
+
+export interface PacketRow {
+  meeting_id: number;
+  packet_url: string;
+  page_count: number;
+  byte_size: string | null;
+  text_page_count: number;
+  image_page_count: number;
+  is_scanned: boolean;
+  segment_count: number;
+  register_count: number;
+  payment_count: number;
+  payment_total_cents: string;
+  staff_report_count: number;
+  captured_at: Date;
+}
+
+export function packetForMeeting(meetingId: number) {
+  return safeQuery<PacketRow>(
+    `SELECT meeting_id, packet_url, page_count, byte_size::text, text_page_count,
+            image_page_count, is_scanned, segment_count, register_count,
+            payment_count, payment_total_cents::text, staff_report_count, captured_at
+       FROM meeting_packets WHERE meeting_id = $1`,
+    [meetingId],
+  );
+}
+
+export interface PacketSegmentRow {
+  id: string;
+  sequence: number;
+  kind: string;
+  title: string | null;
+  start_page: number;
+  end_page: number;
+  has_text: boolean;
+}
+
+export function packetSegmentsForMeeting(meetingId: number) {
+  return safeQuery<PacketSegmentRow>(
+    `SELECT id::text, sequence, kind, title, start_page, end_page,
+            (text IS NOT NULL) AS has_text
+       FROM packet_segments WHERE meeting_id = $1 ORDER BY sequence`,
+    [meetingId],
+  );
+}
+
+export interface RegisterBatchRow {
+  id: string;
+  sequence: number;
+  report_date: Date | null;
+  prepared_by: string | null;
+  start_page: number;
+  end_page: number;
+  page_count: number;
+  declared_page_count: number | null;
+  declared_total_cents: string | null;
+  parsed_total_cents: string;
+  row_count: number;
+  repaired_count: number;
+  uncertain_count: number;
+  trusted: boolean;
+}
+
+export function registerBatchesForMeeting(meetingId: number) {
+  return safeQuery<RegisterBatchRow>(
+    `SELECT id::text, sequence, report_date, prepared_by, start_page, end_page,
+            page_count, declared_page_count, declared_total_cents::text,
+            parsed_total_cents::text, row_count, repaired_count, uncertain_count, trusted
+       FROM check_register_batches WHERE meeting_id = $1 ORDER BY sequence`,
+    [meetingId],
+  );
+}
+
+export function paymentsForMeeting(meetingId: number, limit = 800) {
+  return safeQuery<PaymentRowRecord>(
+    `SELECT ${PAYMENT_COLUMNS}
+       FROM check_payments cp
+       ${TRUSTED_JOIN}
+       JOIN meetings m ON m.id = cp.meeting_id
+       LEFT JOIN meeting_packets mp ON mp.meeting_id = cp.meeting_id
+      WHERE cp.meeting_id = $1
+      ORDER BY cp.amount_cents DESC
+      LIMIT $2`,
+    [meetingId, limit],
+  );
+}
+
+export function staffReportsForMeeting(meetingId: number) {
+  return safeQuery<StaffReportRow>(
+    `SELECT ${STAFF_REPORT_COLUMNS}
+       FROM packet_staff_reports sr
+       JOIN meetings m ON m.id = sr.meeting_id
+       LEFT JOIN meeting_packets mp ON mp.meeting_id = sr.meeting_id
+      WHERE sr.meeting_id = $1
+      ORDER BY sr.sequence`,
+    [meetingId],
+  );
+}
+
+export interface UntrustedRegisterRow extends RegisterBatchRow {
+  meeting_id: number;
+  body: string;
+  starts_at: Date;
+  packet_url: string | null;
+}
+
+/** Registers excluded from every total, and why. Shown openly on /spending. */
+export function untrustedRegisters(limit = 25) {
+  return safeQuery<UntrustedRegisterRow>(
+    `SELECT b.id::text, b.sequence, b.report_date, b.prepared_by, b.start_page, b.end_page,
+            b.page_count, b.declared_page_count, b.declared_total_cents::text,
+            b.parsed_total_cents::text, b.row_count, b.repaired_count, b.uncertain_count,
+            b.trusted, b.meeting_id, m.body, m.starts_at, mp.packet_url
+       FROM check_register_batches b
+       JOIN meetings m ON m.id = b.meeting_id
+       LEFT JOIN meeting_packets mp ON mp.meeting_id = b.meeting_id
+      WHERE NOT b.trusted
+      ORDER BY m.starts_at DESC, b.sequence
+      LIMIT $1`,
+    [limit],
+  );
+}

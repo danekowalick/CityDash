@@ -1,8 +1,8 @@
 # City Dash
 
-A civic dashboard for **Moscow, Idaho** — public meetings and what they decided, police
-activity, changes to the city code, zoning and land use, and the civic calendar. All
-assembled from primary sources, with a link back to every one.
+A civic dashboard for **Moscow, Idaho** — public meetings and what they decided, what the
+city spends, police activity, changes to the city code, zoning and land use, and the
+civic calendar. All assembled from primary sources, with a link back to every one.
 
 It is a facts site. Nothing here is written, summarised, or interpreted by a language
 model: records are parsed deterministically, counts are counted, and code changes are
@@ -72,6 +72,7 @@ If the database is unreachable, the site still renders and says so on
 | `npm run ingest:meetings` | Just the CivicClerk meetings |
 | `npm run ingest:code` | Just the city code chapters |
 | `npm run ingest:minutes` | Just meeting outcomes from minutes |
+| `npm run ingest:packets` | Just spending read from the agenda packets |
 | `npm run ingest:news` | Just the city RSS feeds |
 | `npm run ingest:property` | Just zoning and land use from county GIS |
 
@@ -121,6 +122,7 @@ saved page rather than a mock.
 | --- | --- |
 | `/` | This week: next meeting, latest police log, recent decisions |
 | `/meetings` | 1,700+ meetings; motions, movers, seconders and vote tallies from the minutes |
+| `/spending` | Every payment put to Council for approval, from the packet check registers |
 | `/police` | Daily MPD press logs parsed into incidents, with coverage and gap detection |
 | `/code` | 128 code chapters, hashed and diffed; ordinances; the Decision Tracker |
 | `/property` | Zoning districts and 1,179 land use applications |
@@ -153,6 +155,7 @@ Currently ingested:
 | [City meetings (CivicClerk)](https://moscowid.api.civicclerk.com/v1/Events) | OData API | Agendas, minutes, video, attached documents |
 | [Moscow city code](https://www.ci.moscow.id.us/393/City-Code) | scrape (PDF) | 128 chapters, hashed and diffed on change; ordinances read from the text |
 | Meeting minutes | scrape (PDF) | Motions, movers, seconders, and vote tallies — what each body decided |
+| Agenda packets | scrape (PDF) | The check register, disbursement report and per-item staff reports bound behind each agenda |
 | [City alerts & calendar](https://www.ci.moscow.id.us/RSSFeed.aspx?ModID=76&CID=All) | RSS | Announcements, closures, public hearing notices |
 | [Latah County GIS](https://gis.latah.id.us/arcgis/rest/services) | ArcGIS REST | Zoning districts and 1,179 land use applications |
 
@@ -193,6 +196,35 @@ two-column PDFs; the same sentence re-typeset extracts with different runs of sp
 per-page running heads ("§ 1-1 TITLE 1 — GENERAL § 1-3") move whenever content reflows.
 Without stripping both, every reissue would appear to have changed everywhere. See
 `normaliseCodeText` in `src/lib/parsers/cityCode.ts`.
+
+**Agenda packets are read against their own arithmetic.** Every Council packet carries an
+accounts payable check register listing each cheque the Council is being asked to approve
+— 470-odd lines, none of which appears on the agenda or in the minutes. It is also a
+fixed-width report that clips an amount which overflows its column, printing
+`$1,193,437.` where the cheque total says `$1,193,437.50`. Two things make it safe to
+publish anyway. The register prints its own *Total Amount Being Paid* and its own page
+count, so our reading can be checked against the document; both numbers are stored and the
+site shows them side by side, and ours is never adjusted to match. And a clipped amount is
+recovered only where the cheque's own total makes it arithmetic rather than a guess —
+otherwise it is flagged as understated. A register that fails either check is recorded but
+excluded from every total on the site, because publishing 17 lines of a 400-line register
+would understate the city's spending far more damagingly than admitting we could not read
+it. See `src/lib/parsers/checkRegister.ts`.
+
+**Packets come in two layouts, and half a packet is boilerplate.** Packets before about
+July 2026 render the register with its columns abutting —
+`Professional ServicesGeneral Fund116615 Alex Jones06/17/2026 $540.00`, no space between
+account and fund, fund and cheque number, or payee and date. Since extraction returns each
+page as a single line with no newlines anywhere, rows are found by their tail (a date
+followed by an amount) and split on a closed set of fund names, which is the only thing
+separating an account from a fund. Separately, the contracts, plats and engineering
+specifications bound in behind each staff report are more than half the packet and almost
+entirely template text: a search for "legal" across the raw packet returns twenty hits of
+`ARTICLE 13. LEGAL FEES` and one real payment. Their page ranges are kept and their text is
+not, which is what makes the search useful. The *Major Expenditures* page is kept as text
+but deliberately not parsed into rows — it is laid out in three columns that flatten
+together, so no payee, amount and description can be reassembled reliably. See
+`src/lib/parsers/packet.ts`.
 
 **CivicClerk timestamps lie about their zone.** `startDateTime` is serialised with a
 trailing `Z` but is actually Moscow local wall-clock time. Reading it as UTC puts every
