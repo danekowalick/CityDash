@@ -9,14 +9,6 @@
 name: Ingest
 
 on:
-  schedule:
-    # 07:15 UTC daily -- shortly after midnight Pacific, so the previous day's
-    # press log has been posted.
-    - cron: "15 7 * * *"
-    # Meetings change during the working day; refresh in the afternoon too.
-    - cron: "0 21 * * 1-5"
-    # The code changes rarely; check it weekly on Sunday.
-    - cron: "30 8 * * 0"
   workflow_dispatch:
     inputs:
       job:
@@ -41,9 +33,9 @@ jobs:
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
       CITYDASH_USER_AGENT: ${{ secrets.CITYDASH_USER_AGENT }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: npm
