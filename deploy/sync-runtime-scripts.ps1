@@ -15,7 +15,7 @@ $scripts = @(
     'run-ingest.ps1',
     'run-quick.ps1',
     'health.ps1',
-    'register-db-task.ps1',
+    'register-db-service.ps1',
     'coldstart-test.ps1'
 )
 

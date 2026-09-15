@@ -1,8 +1,10 @@
 # The web server.
 #
-# Waits for the database before starting Next. The site is server-rendered
-# and every page reads Postgres, so coming up without it just means serving
-# "the database could not be read" to anyone who visits.
+# Asks for the database first, but starts Next whatever the answer. The web
+# server must never wait on the database: on 2026-09-14 it sat behind a
+# hung database start for nine hours and the site returned 502. Every page
+# reads Postgres per request, so if the database arrives late the site
+# shows "could not be read" briefly and then recovers on its own.
 
 Set-Location 'C:\apps\city-dash'
 $env:NODE_ENV = 'production'

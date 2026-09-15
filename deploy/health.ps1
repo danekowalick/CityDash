@@ -17,6 +17,27 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+# Check the site itself answers.
+#
+# On 2026-09-14 every line of this report looked healthy -- database up,
+# feeds fresh, tasks "Running" -- while the public site returned 502,
+# because the web server had never started. Feeds being fine says nothing
+# about whether anyone can see them.
+Write-Output "=== web ==="
+try {
+    $r = Invoke-WebRequest -Uri 'http://127.0.0.1:3002/sources' -UseBasicParsing -TimeoutSec 30
+    if ($r.Content -match 'could not be read') {
+        Write-Output "  3002 answers, but pages report the database could not be read  << DOWN"
+    } else {
+        Write-Output ("  3002 answers " + $r.StatusCode)
+    }
+} catch {
+    Write-Output "  nothing answering on 127.0.0.1:3002  << DOWN (public site will 502)"
+}
+$svc = Get-Service -Name citydash-pg -ErrorAction SilentlyContinue
+if ($svc) { Write-Output ("  citydash-pg service " + $svc.Status + " " + $svc.StartType) }
+else      { Write-Output "  citydash-pg service MISSING" }
+
 Write-Output "=== feed health ==="
 $q = @"
 SELECT rpad(s.id,22) || COALESCE(to_char(MAX(r.finished_at),'MM-DD HH24:MI'),'never')
@@ -48,7 +69,7 @@ $fail = & "$bin\psql.exe" -h 127.0.0.1 -p 55432 -U citydash -d citydash -tA -c $
 if ($fail) { $fail } else { Write-Output "  none" }
 
 Write-Output "=== tasks ==="
-foreach ($n in @('CityDash','CityDashDb','CityDashIngest','CityDashQuick')) {
+foreach ($n in @('CityDash','CityDashIngest','CityDashQuick')) {
   $t = Get-ScheduledTask -TaskName $n -ErrorAction SilentlyContinue
   if ($t) { $i = Get-ScheduledTaskInfo -TaskName $n
     Write-Output ("  " + $n.PadRight(16) + $t.State.ToString().PadRight(9) + "last=" + $i.LastRunTime + " rc=" + $i.LastTaskResult) }
